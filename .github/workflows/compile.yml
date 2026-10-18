@@ -53,7 +53,7 @@ jobs:
   build:
     name: 编译 "${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}"
     runs-on: ubuntu-22.04
-    if: ${{ github.event.repository.owner.id == github.event.sender.id }}
+#    if: ${{ github.event.repository.owner.id == github.event.sender.id }}    暂时隐去,可能导致定时编译出问题
 
     steps:
     - name: 校验并显示两阶段构建上下文
