@@ -7,10 +7,9 @@ function Diy_partsh() {
   cd ${HOME_PATH}
   
   # ----------------------------------------------------------
-  # 针对 23.05 / 24.10 强制使用 Go 27.x（兼容 xray-core 等 go>=1.25）
-  # 25.12 源码自带 Go 版本已满足要求，无需强制替换
+  # 强制使用 Go 27.x（兼容 xray-core 等 go>=1.25）
   # ----------------------------------------------------------
-  if [[ "${SOURCE_CODE}" == "IMMORTALWRT" ]] && [[ "${REPO_BRANCH}" != "master" ]] && [[ "${REPO_BRANCH}" =~ (23\.05|24\.10|2410) ]]; then
+  if [[ "${SOURCE_CODE}" == "IMMORTALWRT" ]] && [[ "${REPO_BRANCH}" != "master" ]] && [[ "${REPO_BRANCH}" =~ (23\.05|24\.10|2410|25\.12) ]]; then
     TIME y "ImmortalWrt ${REPO_BRANCH}: 强制使用 Go 1.27（兼容 xray-core 等 go>=1.25）"
     
     # 彻底清理旧的 golang 目录及可能存在的 datout 旧缓存
