@@ -179,18 +179,29 @@ else
 fi
 
 if [[ "${Ttyd_account_free_login}" == "1" ]]; then
-   # 25.x 上 /bin/login 可能不存在，且 ttyd init 对 command 参数处理更严格。
-   # 优先 /bin/login，不存在则回退 /bin/sh -l；显式 enabled=1 + 监听所有接口；重启 ttyd。
+   # 1. 优先 /bin/login，不存在则回退 /bin/sh -l
    _append_uci "if [ -x /bin/login ]; then"
    _append_uci "  uci set ttyd.@ttyd[0].command='/bin/login -f root'"
    _append_uci "else"
    _append_uci "  uci set ttyd.@ttyd[0].command='/bin/sh -l'"
    _append_uci "fi"
-   _append_uci "uci set ttyd.@ttyd[0].interface='0'"
+
+   # 2. 根据实际编译的源码版本（LUCI_EDITION）做差异化处理，互不干扰
+   if [[ "${LUCI_EDITION}" == *"25."* ]]; then
+      # 25.x 版本：不支持 interface=0，需要删除 interface，并开启 rw 写入权限
+      _append_uci "uci delete ttyd.@ttyd[0].interface 2>/dev/null || true"
+      _append_uci "uci set ttyd.@ttyd[0].rw='1'"
+      echo "TTYD免账户登录完成（25.x 专属兼容模式）"
+   else
+      # 24.10 及以下版本：保留原有的 interface=0 设置
+      _append_uci "uci set ttyd.@ttyd[0].interface='0'"
+      echo "TTYD免账户登录完成（旧版本兼容模式）"
+   fi
+
+   # 3. 统一提交并重启服务
    _append_uci "uci set ttyd.@ttyd[0].enabled='1'"
    _append_uci "uci commit ttyd"
    _append_uci "/etc/init.d/ttyd restart 2>/dev/null || true"
-   echo "TTYD免账户登录完成（含 25.x 兼容兜底）"
 else
    echo "不进行,TTYD免账户登录"
 fi
