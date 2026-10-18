@@ -367,8 +367,9 @@ for x in "${k[@]}"; do \
 done
 sed -i '/^$/d' "${CONFIG_TXT}"
 
-# 前面修改的文件改回去
-sed -i -E '/^\t/! s/^ +//' "${DEFAULT_PATH}"
+# 前面修改的文件改回去（仅作用于从上游拉取、被 sed 改过缩进的文件；
+# 不能作用在 DEFAULT_PATH 上，因为 DEFAULT_PATH 里的 TTYD 段有 if/fi 结构，
+# 削掉缩进会破坏可读性，且未来若加 heredoc/case 会出语法问题）
 ! grep -q "exit 0" "$DEFAULT_PATH" && sed -i '$a\exit 0' "${DEFAULT_PATH}"
 }
 

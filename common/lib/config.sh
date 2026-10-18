@@ -7,7 +7,8 @@ function Diy_partsh() {
   cd ${HOME_PATH}
   
   # ----------------------------------------------------------
-  # 🚀 强制直接从 sbwml 克隆 Go 27.x 分支，绕过本地 datout 缓存干扰
+  # 针对 23.05 / 24.10 强制使用 Go 27.x（兼容 xray-core 等 go>=1.25）
+  # 25.12 源码自带 Go 版本已满足要求，无需强制替换
   # ----------------------------------------------------------
   if [[ "${SOURCE_CODE}" == "IMMORTALWRT" ]] && [[ "${REPO_BRANCH}" != "master" ]] && [[ "${REPO_BRANCH}" =~ (23\.05|24\.10|2410) ]]; then
     TIME y "ImmortalWrt ${REPO_BRANCH}: 强制使用 Go 1.27（兼容 xray-core 等 go>=1.25）"

@@ -5,11 +5,24 @@
 function Diy_definition() {
 cd ${HOME_PATH}
 source "${DIY_PT2_SH}"
-# 获取源码文件的IP
+
+# ---------- 追加 uci 命令到首启脚本的辅助函数 ----------
+# 说明：25.x(ImmortalWrt 25.12) 的 config_generate 已重写为 uci batch 模板，
+# 老 sed 锚点 "set network.$1.xxx" 全部不存在，导致旁路由设置失效。
+# 这里统一改为写入 /etc/init.d/auto-scripts 的 99-first-run（即 DEFAULT_PATH），
+# 用 uci 命令完成设置，24.10 / 25.12 都通用。
+_append_uci() {
+  cat >> "${DEFAULT_PATH}" <<EOF
+$1
+EOF
+}
+
+# 获取源码文件的IP（25.x 下旧值已抓不到，统一置空兜底）
+# 注意：新逻辑已改用 uci 首启脚本，不再依赖 ipadd/netmas/opname。
 lan="/set network.\$1.netmask/a"
-ipadd="$(grep "ipaddr:-" "${GENE_PATH}" |grep -v 'addr_offset' |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
-netmas="$(grep "netmask:-" "${GENE_PATH}" |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
-opname="$(grep "hostname=" "${GENE_PATH}" |grep -v '\$hostname' |cut -d "'" -f2)"
+ipadd=""
+netmas=""
+opname=""
 if [[ -n "$(grep "set network.\${1}6.device" "${GENE_PATH}")" ]]; then
   ifnamee="uci set network.ipv6.device='@lan'"
   set_add="uci add_list firewall.@zone[0].network='ipv6'"
@@ -21,17 +34,19 @@ fi
 if [[ "${SOURCE_CODE}" == "OFFICIAL" ]] && [[ "${REPO_BRANCH}" == "openwrt-19.07" ]]; then
   devicee="uci set network.ipv6.device='@lan'"
 fi
+# 25.x 兜底：若源码中无 ipv6.device 锚点，devicee 默认为 device 写法
+devicee="${devicee:-uci set network.ipv6.device='@lan'}"
 
 if [[ "${Ipv4_ipaddr}" == "0" ]] || [[ -z "${Ipv4_ipaddr}" ]]; then
   echo "不进行,修改后台IP"
 elif [[ -n "${Ipv4_ipaddr}" ]]; then
   Kernel_Pat="$(echo ${Ipv4_ipaddr} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
-  ipadd_Pat="$(echo ${ipadd} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
-  if [[ -n "${Kernel_Pat}" ]] && [[ -n "${ipadd_Pat}" ]]; then
-     sed -i "s/${ipadd}/${Ipv4_ipaddr}/g" "${GENE_PATH}"
+  if [[ -n "${Kernel_Pat}" ]]; then
+     _append_uci "uci set network.lan.ipaddr='${Ipv4_ipaddr}'"
+     _append_uci "uci commit network"
      echo "openwrt后台IP[${Ipv4_ipaddr}]修改完成"
    else
-     TIME r "因IP获取有错误，后台IP更换不成功，请检查IP是否填写正确，如果填写正确，那就是获取不了源码内的IP了"
+     TIME r "因IP获取有错误，后台IP更换不成功，请检查IP是否填写正确"
    fi
 fi
 
@@ -39,12 +54,12 @@ if [[ "${Netmask_netm}" == "0" ]] || [[ -z "${Netmask_netm}" ]]; then
   echo "不进行,子网掩码修改"
 elif [[ -n "${Netmask_netm}" ]]; then
   Kernel_netm="$(echo ${Netmask_netm} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
-  ipadd_mas="$(echo ${netmas} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
-  if [[ -n "${Kernel_netm}" ]] && [[ -n "${ipadd_mas}" ]]; then
-     sed -i "s/${netmas}/${Netmask_netm}/g" "${GENE_PATH}"
+  if [[ -n "${Kernel_netm}" ]]; then
+     _append_uci "uci set network.lan.netmask='${Netmask_netm}'"
+     _append_uci "uci commit network"
      echo "子网掩码[${Netmask_netm}]修改完成"
    else
-     TIME r "因子网掩码获取有错误，子网掩码设置失败，请检查IP是否填写正确，如果填写正确，那就是获取不了源码内的IP了"
+     TIME r "因子网掩码获取有错误，子网掩码设置失败"
   fi
 fi
 
@@ -102,8 +117,9 @@ fi
 
 if [[ "${Op_name}" == "0" ]] || [[ -z "${Op_name}" ]]; then
   echo "不进行,修改主机名称"
-elif [[ -n "${Op_name}" ]] && [[ -n "${opname}" ]]; then
-  sed -i "s/${opname}/${Op_name}/g" "${GENE_PATH}"
+elif [[ -n "${Op_name}" ]]; then
+  _append_uci "uci set system.@system[0].hostname='${Op_name}'"
+  _append_uci "uci commit system"
   echo "主机名[${Op_name}]修改完成"
 fi
 
@@ -112,10 +128,11 @@ if [[ "${Gateway_Settings}" == "0" ]] || [[ -z "${Gateway_Settings}" ]]; then
 elif [[ -n "${Gateway_Settings}" ]]; then
   Router_gat="$(echo ${Gateway_Settings} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
   if [[ -n "${Router_gat}" ]]; then
-    sed -i "$lan\set network.lan.gateway='${Gateway_Settings}'" "${GENE_PATH}"
+    _append_uci "uci set network.lan.gateway='${Gateway_Settings}'"
+    _append_uci "uci commit network"
     echo "网关[${Gateway_Settings}]修改完成"
   else
-    TIME r "因子网关IP获取有错误，网关IP设置失败，请检查IP是否填写正确，如果填写正确，那就是获取不了源码内的IP了"
+    TIME r "因子网关IP获取有错误，网关IP设置失败"
   fi
 fi
 
@@ -124,10 +141,11 @@ if [[ "${DNS_Settings}" == "0" ]] || [[ -z "${DNS_Settings}" ]]; then
 elif [[ -n "${DNS_Settings}" ]]; then
   ipa_dns="$(echo ${DNS_Settings} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
   if [[ -n "${ipa_dns}" ]]; then
-     sed -i "$lan\set network.lan.dns='${DNS_Settings}'" "${GENE_PATH}"
+     _append_uci "uci set network.lan.dns='${DNS_Settings}'"
+     _append_uci "uci commit network"
      echo "DNS[${DNS_Settings}]设置完成"
   else
-    TIME r "因DNS获取有错误，DNS设置失败，请检查DNS是否填写正确"
+    TIME r "因DNS获取有错误，DNS设置失败"
   fi
 fi
 
@@ -136,30 +154,43 @@ if [[ "${Broadcast_Ipv4}" == "0" ]] || [[ -z "${Broadcast_Ipv4}" ]]; then
 elif [[ -n "${Broadcast_Ipv4}" ]]; then
   IPv4_Bro="$(echo ${Broadcast_Ipv4} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
   if [[ -n "${IPv4_Bro}" ]]; then
-    sed -i "$lan\set network.lan.broadcast='${Broadcast_Ipv4}'" "${GENE_PATH}"
+    _append_uci "uci set network.lan.broadcast='${Broadcast_Ipv4}'"
+    _append_uci "uci commit network"
     echo "广播IP[${Broadcast_Ipv4}]设置完成"
   else
-    TIME r "因IPv4 广播IP获取有错误，IPv4广播IP设置失败，请检查IPv4广播IP是否填写正确"
+    TIME r "因IPv4广播IP获取有错误，IPv4广播IP设置失败"
   fi
 fi
 
 if [[ "${Disable_DHCP}" == "1" ]]; then
-   sed -i "$lan\set dhcp.lan.ignore='1'" "${GENE_PATH}"
+   _append_uci "uci set dhcp.lan.ignore='1'"
+   _append_uci "uci commit dhcp"
    echo "关闭DHCP设置完成"
 else
    echo "不进行,关闭DHCP设置"
 fi
 
 if [[ "${Disable_Bridge}" == "1" ]]; then
-   sed -i "$lan\delete network.lan.type" "${GENE_PATH}"
+   _append_uci "uci delete network.lan.type 2>/dev/null || true"
+   _append_uci "uci commit network"
    echo "去掉桥接设置完成"
 else
    echo "不进行,去掉桥接设"
 fi
 
 if [[ "${Ttyd_account_free_login}" == "1" ]]; then
-   sed -i "$lan\set ttyd.@ttyd[0].command='/bin/login -f root'" "${GENE_PATH}"
-   echo "TTYD免账户登录完成"
+   # 25.x 上 /bin/login 可能不存在，且 ttyd init 对 command 参数处理更严格。
+   # 优先 /bin/login，不存在则回退 /bin/sh -l；显式 enabled=1 + 监听所有接口；重启 ttyd。
+   _append_uci "if [ -x /bin/login ]; then"
+   _append_uci "  uci set ttyd.@ttyd[0].command='/bin/login -f root'"
+   _append_uci "else"
+   _append_uci "  uci set ttyd.@ttyd[0].command='/bin/sh -l'"
+   _append_uci "fi"
+   _append_uci "uci set ttyd.@ttyd[0].interface='0'"
+   _append_uci "uci set ttyd.@ttyd[0].enabled='1'"
+   _append_uci "uci commit ttyd"
+   _append_uci "/etc/init.d/ttyd restart 2>/dev/null || true"
+   echo "TTYD免账户登录完成（含 25.x 兼容兜底）"
 else
    echo "不进行,TTYD免账户登录"
 fi
@@ -316,7 +347,7 @@ CONFIG_PACKAGE_6to4=y
 fi
 
 if [[ "${Enable_IPV4_function}" == "1" ]] && \
-[[ "${REPO_BRANCH}" =~ ^(main|master|2410|(openwrt-)?(19\.07|23\.05|24\.10))$ ]]; then
+[[ "${REPO_BRANCH}" =~ ^(main|master|2410|(openwrt-)?(19\.07|23\.05|24\.10|25\.10|25\.12))$ ]]; then
 echo '
 # CONFIG_PACKAGE_ipv6helper is not set
 # CONFIG_PACKAGE_ip6tables is not set
