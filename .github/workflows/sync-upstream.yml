@@ -21,26 +21,24 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.REPO_TOKEN }}
 
-      - name: 无痕同步上游最新代码
+      - name: 获取并魔改上游同步器
         shell: bash
         run: |
           set -euo pipefail
           
-          # 1. 配置 Git 身份
+          # 1. 把咱们的私有文件统统备份到系统临时目录（免死金牌）
+          mkdir -p /tmp/my_backup
+          if [ -f ".github/workflows/kkk.yml" ]; then
+            cp .github/workflows/kkk.yml /tmp/my_backup/
+          fi
+          if [ -f ".github/workflows/sync-upstream.yml" ]; then
+            cp .github/workflows/sync-upstream.yml /tmp/my_backup/
+          fi
+
+          # 2. 配置 Git 身份
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 2. 核心保护名单备份到系统临时目录
-          echo "📦 正在备份关键文件..."
-          mkdir -p /tmp/backup
-          if [ -f "build/Immortalwrt/diy-part.sh" ]; then cp build/Immortalwrt/diy-part.sh /tmp/backup/; fi
-          if [ -f "build/Immortalwrt/settings.ini" ]; then cp build/Immortalwrt/settings.ini /tmp/backup/; fi
-          if [ -d "build/Immortalwrt/seed" ]; then cp -r build/Immortalwrt/seed /tmp/backup/; fi
-          if [ -f ".github/workflows/kkk.yml" ]; then cp .github/workflows/kkk.yml /tmp/backup/; fi
-          if [ -f ".github/workflows/sync-upstream.yml" ]; then cp .github/workflows/sync-upstream.yml /tmp/backup/; fi
-
-          # 3. 拉取原作者的最新代码
-          echo "🔄 正在拉取上游最新代码..."
           if git remote get-url upstream >/dev/null 2>&1; then
             git remote set-url upstream "https://github.com/${UPSTREAM_REPO}.git"
           else
@@ -48,38 +46,53 @@ jobs:
           fi
           git fetch upstream "${UPSTREAM_BRANCH}" --prune
           
-          # 🌟 核心技术：只拿代码，不要历史
-          # 创建一个临时分支，把上游代码拿过来，但不保留他的 commit 历史
-          git checkout --orphan temp_sync
-          git reset --hard "upstream/${UPSTREAM_BRANCH}"
+          SYNC_SCRIPT="${RUNNER_TEMP}/openwrt-auto-sync-upstream.sh"
+          git show "upstream/${UPSTREAM_BRANCH}:common/sync-upstream.sh" > "${SYNC_SCRIPT}"
+          chmod +x "${SYNC_SCRIPT}"
           
-          # 物理剔除不要的废弃文件夹和自检文件
-          echo "🧹 正在清理不需要的文件..."
+          # 3. 在原作者脚本的最后，强行追加我们的“私有化手术”
+          cat << 'EOF' >> "${SYNC_SCRIPT}"
+          
+          # ==========================================
+          # === 自定义追加：同步后的清理与恢复 ===
+          # ==========================================
+          
+          # 剔除原作者强制拉回来的废弃文件夹和自检
           rm -rf build/Lienol build/Mt798x build/Official build/Xwrt
           rm -f .github/workflows/Lienol.yml
           rm -f .github/workflows/Mt798x.yml
           rm -f .github/workflows/Official.yml
           rm -f .github/workflows/Xwrt.yml
           rm -f .github/workflows/validate.yml
-
-          # 4. 从临时目录恢复你的心血
-          echo "🛡️ 正在恢复被保护的文件..."
-          mkdir -p build/Immortalwrt
-          if [ -f "/tmp/backup/diy-part.sh" ]; then cp /tmp/backup/diy-part.sh build/Immortalwrt/; fi
-          if [ -f "/tmp/backup/settings.ini" ]; then cp /tmp/backup/settings.ini build/Immortalwrt/; fi
-          if [ -d "/tmp/backup/seed" ]; then cp -r /tmp/backup/seed build/Immortalwrt/; fi
-          if [ -f "/tmp/backup/kkk.yml" ]; then cp /tmp/backup/kkk.yml .github/workflows/; fi
-          if [ -f "/tmp/backup/sync-upstream.yml" ]; then cp /tmp/backup/sync-upstream.yml .github/workflows/; fi
-
-          # 5. 提交并强推
-          echo "🚀 正在生成属于你自己的全新提交并推送到云端..."
+          
+          # 把咱们的私有文件从 /tmp 请回来
+          if [ -d "/tmp/my_backup" ]; then
+            mkdir -p .github/workflows
+            cp -r /tmp/my_backup/* .github/workflows/
+          fi
+          
+          # 提交并推送
           git add -A
-          # 这一步会生成一个全新的 commit（没有 parent），彻底洗掉原作者的提交历史
-          git commit -m "sync: 同步上游最新框架代码 (无历史记录模式)"
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: remove unused dirs, protect custom workflows"
+            git push origin HEAD:${DEFAULT_BRANCH:-main} --force
+          fi
+          EOF
           
-          # 强行推送到 main 分支，覆盖云端的所有记录
-          git push origin HEAD:main --force
-          
-          # 清理临时分支
-          git checkout main
-          git branch -D temp_sync
+          bash -n "${SYNC_SCRIPT}"
+          echo "最新同步器已加载并魔改完毕：${SYNC_SCRIPT}"
+
+      - name: 执行上游同步
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash "${RUNNER_TEMP}/openwrt-auto-sync-upstream.sh"
+
+      - name: 上传自定义配置备份
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: custom-backup
+          path: ${{ runner.temp }}/openwrt-auto-sync/custom-backup.tar.gz
+          if-no-files-found: ignore
+          retention-days: 7
