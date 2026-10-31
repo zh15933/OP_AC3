@@ -28,13 +28,17 @@ jobs:
           ts=$(date -u +%Y%m%d_%H%M%S)
           mkdir -p backups/auto_sync
           shopt -s nullglob
+          # 精准备份：只备份 Immortalwrt 和 Lede 的配置，当前脚本，以及你的 kkk.yml
           tar -czf "backups/auto_sync/custom-backup-${ts}.tar.gz" \
-            build/*/diy-part.sh \
-            build/*/settings.ini \
-            build/*/seed \
-            build/*/diy \
-            build/*/files \
-            build/*/patches \
+            build/Immortalwrt/diy-part.sh \
+            build/Immortalwrt/settings.ini \
+            build/Immortalwrt/seed \
+            build/Lede/diy-part.sh \
+            build/Lede/settings.ini \
+            build/Lede/seed \
+            common/custom \
+            .github/workflows/sync-upstream.yml \
+            .github/workflows/kkk.yml \
             2>/dev/null || true
           shopt -u nullglob
           echo "BACKUP_FILE=backups/auto_sync/custom-backup-${ts}.tar.gz" >> $GITHUB_ENV
@@ -46,7 +50,7 @@ jobs:
           path: ${{ env.BACKUP_FILE }}
           if-no-files-found: ignore
 
-      - name: 合并上游到默认分支
+      - name: 强制拉取并剔除多余文件夹
         shell: bash
         run: |
           set -euxo pipefail
@@ -60,55 +64,43 @@ jobs:
           git fetch upstream "${UPSTREAM_BRANCH}" --prune
 
           git checkout "${DEFAULT_BRANCH}"
-
-          LOCAL_COMMIT="$(git rev-parse HEAD)"
-          UPSTREAM_COMMIT="$(git rev-parse "upstream/${UPSTREAM_BRANCH}")"
-
-          # If upstream is already an ancestor, the fork is synchronized or ahead.
-          if git merge-base --is-ancestor "${UPSTREAM_COMMIT}" "${LOCAL_COMMIT}"; then
-            AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
-            echo "Already up to date with upstream (ahead=${AHEAD}, behind=0)."
+          
+          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" HEAD; then
+            echo "Already up to date with upstream."
             exit 0
           fi
 
-          if git merge-base --is-ancestor "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}"; then
-            BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
-            echo "Sync required: behind=${BEHIND}, ahead=0."
-          else
-            COMMON_BASE="$(git merge-base "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}" 2>/dev/null || true)"
-            if [[ -n "${COMMON_BASE}" ]]; then
-              AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
-              BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
-              echo "Syncing a diverged history (ahead=${AHEAD}, behind=${BEHIND}, common=${COMMON_BASE})."
-            else
-              echo "::error::Local and upstream histories have no common ancestor; resolve the Git history before syncing."
-              exit 1
-            fi
-          fi
+          # 1. 强制将本地硬重置为上游最新代码（彻底告别合并冲突）
+          git reset --hard "upstream/${UPSTREAM_BRANCH}"
 
-          # Prefer upstream on conflicts, then restore custom files from backup.
-          git merge -X theirs --no-edit "upstream/${UPSTREAM_BRANCH}" || {
-            echo "::error::Merge conflict occurred. Please resolve manually (or use GitHub Sync fork).";
-            exit 1;
-          }
+          # 2. 🌟 物理删除不需要的 4 个源码文件夹
+          rm -rf build/Lienol
+          rm -rf build/Mt798x
+          rm -rf build/Official
+          rm -rf build/Xwrt
+          
+          # 3. 🌟 物理删除 workflows 里对应的 4 个无用启动文件
+          rm -f .github/workflows/Lienol.yml
+          rm -f .github/workflows/Mt798x.yml
+          rm -f .github/workflows/Official.yml
+          rm -f .github/workflows/Xwrt.yml
 
-          # Restore user-facing build customization. Core scripts under common/custom
-          # must always come from upstream and are intentionally not restored.
+          # 4. 恢复你备份的自定义文件（精准恢复，且包含 kkk.yml）
           if [ -f "${BACKUP_FILE}" ]; then
             tar -xzf "${BACKUP_FILE}" -C . || true
-            find build -type f -path '*/relevance/actions_version' -delete
-            rm -f UPSTREAM_VERSION
-            git add -A build 2>/dev/null || true
+            git add build/Immortalwrt/diy-part.sh build/Immortalwrt/settings.ini build/Immortalwrt/seed \
+                    build/Lede/diy-part.sh build/Lede/settings.ini build/Lede/seed \
+                    common/custom .github/workflows/sync-upstream.yml .github/workflows/kkk.yml 2>/dev/null || true
             if ! git diff --cached --quiet; then
               git commit -m "restore custom files after upstream sync"
             fi
-          else
-            find build -type f -path '*/relevance/actions_version' -delete
-            rm -f UPSTREAM_VERSION
-            git add -A build 2>/dev/null || true
-            if ! git diff --cached --quiet; then
-              git commit -m "remove obsolete version metadata after upstream sync"
-            fi
           fi
 
-          git push origin "${DEFAULT_BRANCH}"
+          # 5. 提交删除多余文件的操作
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: remove unused build dirs and workflows"
+          fi
+
+          # 6. 强制推送到你的仓库
+          git push origin "${DEFAULT_BRANCH}" --force
