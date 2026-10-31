@@ -21,21 +21,66 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.REPO_TOKEN }}
 
-      - name: 获取上游最新同步器
+      - name: 获取并魔改上游同步器
         shell: bash
         run: |
           set -euo pipefail
+          
+          # 1. 把咱们的私有文件统统备份到系统临时目录（免死金牌）
+          mkdir -p /tmp/my_backup
+          if [ -f ".github/workflows/kkk.yml" ]; then
+            cp .github/workflows/kkk.yml /tmp/my_backup/
+          fi
+          if [ -f ".github/workflows/sync-upstream.yml" ]; then
+            cp .github/workflows/sync-upstream.yml /tmp/my_backup/
+          fi
+
+          # 2. 配置 Git 身份
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           if git remote get-url upstream >/dev/null 2>&1; then
             git remote set-url upstream "https://github.com/${UPSTREAM_REPO}.git"
           else
             git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
           fi
           git fetch upstream "${UPSTREAM_BRANCH}" --prune
+          
           SYNC_SCRIPT="${RUNNER_TEMP}/openwrt-auto-sync-upstream.sh"
           git show "upstream/${UPSTREAM_BRANCH}:common/sync-upstream.sh" > "${SYNC_SCRIPT}"
           chmod +x "${SYNC_SCRIPT}"
+          
+          # 3. 在原作者脚本的最后，强行追加我们的“私有化手术”
+          cat << 'EOF' >> "${SYNC_SCRIPT}"
+          
+          # ==========================================
+          # === 自定义追加：同步后的清理与恢复 ===
+          # ==========================================
+          
+          # 剔除原作者强制拉回来的废弃文件夹和自检
+          rm -rf build/Lienol build/Mt798x build/Official build/Xwrt
+          rm -f .github/workflows/Lienol.yml
+          rm -f .github/workflows/Mt798x.yml
+          rm -f .github/workflows/Official.yml
+          rm -f .github/workflows/Xwrt.yml
+          rm -f .github/workflows/validate.yml
+          
+          # 把咱们的私有文件从 /tmp 请回来
+          if [ -d "/tmp/my_backup" ]; then
+            mkdir -p .github/workflows
+            cp -r /tmp/my_backup/* .github/workflows/
+          fi
+          
+          # 提交并推送
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: remove unused dirs, protect custom workflows"
+            git push origin HEAD:${DEFAULT_BRANCH:-main} --force
+          fi
+          EOF
+          
           bash -n "${SYNC_SCRIPT}"
-          echo "最新同步器已加载：${SYNC_SCRIPT}"
+          echo "最新同步器已加载并魔改完毕：${SYNC_SCRIPT}"
 
       - name: 执行上游同步
         shell: bash
