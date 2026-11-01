@@ -61,6 +61,9 @@ export Delete_unnecessary_items="0"          # 个别机型内一堆其他机型
 export Disable_53_redirection="0"            # 删除DNS强制重定向53端口防火墙规则(个别源码本身不带此功能)(1为启用命令,填0为不作修改)
 export Cancel_running="0"                    # 取消路由器每天跑分任务(个别源码本身不带此功能)(1为启用命令,填0为不作修改)
 
+# 把 honk 拉取到你创建的目录下的 honk 文件夹中
+mkdir -p package/xhh_pkgs
+git clone --depth=1 https://github.com/kenzok8/openwrt-honk.git package/xhh_pkgs/honk
 
 # 晶晨CPU系列打包固件设置(不懂请看说明)
 export amlogic_model="s905d"
