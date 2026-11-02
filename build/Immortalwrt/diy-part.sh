@@ -111,6 +111,44 @@ CURRENT_GO_VERSION=$(grep -E '^GO_VERSION_MAJOR_MINOR:=' feeds/packages/lang/gol
 CURRENT_GO_PATCH=$(grep -E '^GO_VERSION_PATCH:=' feeds/packages/lang/golang/golang/Makefile | cut -d'=' -f2)
 echo -e "\033[1;32m✅ Go 版本替换完成！当前源码中的 Go 版本为：${CURRENT_GO_VERSION}.${CURRENT_GO_PATCH}\033[0m"
 
+# ==========================================
+# 4. 修复 golang1.27/host 缺失的警告
+# ==========================================
+echo -e "\033[1;33m[$(date +%H:%M:%S)] 正在创建 golang1.27 虚拟包，消除警告...\033[0m"
+mkdir -p package/golang1.27
+cat > package/golang1.27/Makefile << 'EOF'
+include $(TOPDIR)/rules.mk
+
+PKG_NAME:=golang1.27
+PKG_VERSION:=1.27
+PKG_RELEASE:=1
+
+include $(INCLUDE_DIR)/package.mk
+
+define Package/golang1.27
+  SECTION:=lang
+  CATEGORY:=Languages
+  TITLE:=Go 1.27 Compatibility Alias
+  DEPENDS:=+golang
+endef
+
+define Package/golang1.27/description
+  Virtual package to satisfy dependencies for golang1.27.
+endef
+
+define Build/Prepare
+endef
+
+define Build/Compile
+endef
+
+define Package/golang1.27/install
+endef
+
+$(eval $(call BuildPackage,golang1.27))
+EOF
+echo -e "\033[1;32m✅ golang1.27 虚拟包创建成功！警告已免疫！\033[0m"
+
 echo -e "\n\033[1;32m🎉🎉🎉 [$(date +%H:%M:%S)] 环境修复配置完毕！可以安全进入编译了！🎉🎉🎉\033[0m\n"
 
 # 整理固件包时候,删除您不想要的固件或者文件,让它不需要上传到Actions空间(根据编译机型变化,自行调整删除名称)
