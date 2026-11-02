@@ -21,18 +21,16 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.REPO_TOKEN }}
 
-      - name: 备份自定义的 kkk.yml 和 666.yml
+      - name: 备份自定义的 kkk.yml、666.yml 和 trigger.yml
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f ".github/workflows/kkk.yml" ]; then
-            cp ".github/workflows/kkk.yml" "${RUNNER_TEMP}/kkk.yml.bak"
-            echo "已备份 kkk.yml"
-          fi
-          if [ -f ".github/workflows/666.yml" ]; then
-            cp ".github/workflows/666.yml" "${RUNNER_TEMP}/666.yml.bak"
-            echo "已备份 666.yml"
-          fi
+          for f in "kkk.yml" "666.yml" "trigger.yml"; do
+            if [ -f ".github/workflows/$f" ]; then
+              cp ".github/workflows/$f" "${RUNNER_TEMP}/${f}.bak"
+              echo "已备份 $f"
+            fi
+          done
 
       - name: 获取上游最新同步器
         shell: bash
@@ -66,21 +64,17 @@ jobs:
           
           HAS_CHANGES=false
           
-          # 1. 恢复自定义文件 kkk.yml 和 666.yml
-          if [ -f "${RUNNER_TEMP}/kkk.yml.bak" ]; then
-            mkdir -p .github/workflows
-            cp "${RUNNER_TEMP}/kkk.yml.bak" ".github/workflows/kkk.yml"
-            echo "已恢复 kkk.yml"
-            HAS_CHANGES=true
-          fi
-          if [ -f "${RUNNER_TEMP}/666.yml.bak" ]; then
-            mkdir -p .github/workflows
-            cp "${RUNNER_TEMP}/666.yml.bak" ".github/workflows/666.yml"
-            echo "已恢复 666.yml"
-            HAS_CHANGES=true
-          fi
+          # 1. 恢复自定义文件 (kkk, 666, trigger)
+          for f in "kkk.yml" "666.yml" "trigger.yml"; do
+            if [ -f "${RUNNER_TEMP}/${f}.bak" ]; then
+              mkdir -p .github/workflows
+              cp "${RUNNER_TEMP}/${f}.bak" ".github/workflows/$f"
+              echo "已恢复 $f"
+              HAS_CHANGES=true
+            fi
+          done
           
-          # 2. 删除不需要的 workflow 文件（加上了 validate.yml）
+          # 2. 删除不需要的 workflow 文件
           FILES_TO_DELETE=(
             ".github/workflows/Lienol.yml"
             ".github/workflows/Mt798x.yml"
@@ -118,8 +112,7 @@ jobs:
           if [ "$HAS_CHANGES" = true ]; then
             git add -A
             if ! git diff --cached --quiet; then
-              git commit -m "chore: 恢复 kkk/666 workflow，清理无效配置"
-              
+              git commit -m "chore: 恢复自定义 workflow (666, kkk, trigger)，清理无效配置"
               CURRENT_BRANCH="${GITHUB_REF_NAME:-$(git branch --show-current)}"
               git push origin "HEAD:${CURRENT_BRANCH}"
               echo "清理完成并已推送。"
