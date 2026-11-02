@@ -1,4 +1,4 @@
-name: Sync upstream (666)
+name: 同步上游(自设)
 
 on:
   workflow_dispatch:
