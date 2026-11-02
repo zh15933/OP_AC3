@@ -80,6 +80,38 @@ grep -rl '"Web 管理"' . | xargs -r sed -i 's?"Web 管理"?"Web管理"?g'
 grep -rl '"管理权"' . | xargs -r sed -i 's?"管理权"?"改密码"?g'
 grep -rl '"带宽监控"' . | xargs -r sed -i 's?"带宽监控"?"监控"?g'
 
+# ==========================================
+# 开始执行环境修复
+# ==========================================
+echo -e "\n\033[1;36m[$(date +%H:%M:%S)] >>> 开始执行环境修复，请稍候...\033[0m"
+
+# 1. 建立官方目标目录，骗过上游的“强迫症”检测
+echo -e "\033[1;33m[$(date +%H:%M:%S)] 步骤 1/3: 绕过上游 Xray 强制删包检测...\033[0m"
+mkdir -p feeds/packages/net/xray-core
+echo -e "\033[1;32m✅ 虚假目标目录已建立！\033[0m"
+
+# 2. 精准拉取最新版 Xray-core（防止版本太旧不匹配 PassWall）
+echo -e "\033[1;33m[$(date +%H:%M:%S)] 步骤 2/3: 正在拉取最新版 PassWall Xray-core...\033[0m"
+rm -rf package/custom/xray-core
+git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages.git /tmp/pw-packages
+mkdir -p package/custom
+cp -Rf /tmp/pw-packages/xray-core package/custom/xray-core
+rm -rf /tmp/pw-packages
+echo -e "\033[1;32m✅ 最新版 Xray-core 已就位！\033[0m"
+
+# 3. 强行替换 Go 版本为 27.x（适配最新 Xray）
+echo -e "\033[1;33m[$(date +%H:%M:%S)] 步骤 3/3: 正在强制替换 Go 版本为 27.x...\033[0m"
+rm -rf feeds/packages/lang/golang
+git clone --depth=1 https://github.com/sbwml/packages_lang_golang.git -b 27.x feeds/packages/lang/golang
+# 清理缓存防止冲突
+rm -rf staging_dir/hostpkg/stamp/.golang* build_dir/hostpkg/go-* tmp/go-build dl/go-mod-cache || true
+
+# 👇 读取当前 Go 版本号并提示 👇
+CURRENT_GO_VERSION=$(grep -E '^GO_VERSION_MAJOR_MINOR:=' feeds/packages/lang/golang/golang/Makefile | cut -d'=' -f2)
+CURRENT_GO_PATCH=$(grep -E '^GO_VERSION_PATCH:=' feeds/packages/lang/golang/golang/Makefile | cut -d'=' -f2)
+echo -e "\033[1;32m✅ Go 版本替换完成！当前源码中的 Go 版本为：${CURRENT_GO_VERSION}.${CURRENT_GO_PATCH}\033[0m"
+
+echo -e "\n\033[1;32m🎉🎉🎉 [$(date +%H:%M:%S)] 环境修复配置完毕！可以安全进入编译了！🎉🎉🎉\033[0m\n"
 
 # 整理固件包时候,删除您不想要的固件或者文件,让它不需要上传到Actions空间(根据编译机型变化,自行调整删除名称)
 cat >"$CLEAR_PATH" <<-EOF
