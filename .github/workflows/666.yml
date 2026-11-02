@@ -1,4 +1,4 @@
-name: 同步上游(自设)
+name: Sync upstream (666)
 
 on:
   workflow_dispatch:
@@ -25,12 +25,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # 备份 kkk.yml
           if [ -f ".github/workflows/kkk.yml" ]; then
             cp ".github/workflows/kkk.yml" "${RUNNER_TEMP}/kkk.yml.bak"
             echo "已备份 kkk.yml"
           fi
-          # 备份 666.yml（也就是当前这个文件）
           if [ -f ".github/workflows/666.yml" ]; then
             cp ".github/workflows/666.yml" "${RUNNER_TEMP}/666.yml.bak"
             echo "已备份 666.yml"
@@ -58,7 +56,7 @@ jobs:
           set -euo pipefail
           bash "${RUNNER_TEMP}/openwrt-auto-sync-upstream.sh"
 
-      - name: 恢复 666.yml / kkk.yml 并清理不需要的 workflow 和 build 目录
+      - name: 恢复自定义文件并清理不需要的 workflow 和 build 目录
         shell: bash
         run: |
           set -euo pipefail
@@ -68,7 +66,7 @@ jobs:
           
           HAS_CHANGES=false
           
-          # 1. 恢复 kkk.yml 和 666.yml
+          # 1. 恢复自定义文件 kkk.yml 和 666.yml
           if [ -f "${RUNNER_TEMP}/kkk.yml.bak" ]; then
             mkdir -p .github/workflows
             cp "${RUNNER_TEMP}/kkk.yml.bak" ".github/workflows/kkk.yml"
@@ -82,13 +80,14 @@ jobs:
             HAS_CHANGES=true
           fi
           
-          # 2. 删除不需要的 workflow 文件
+          # 2. 删除不需要的 workflow 文件（加上了 validate.yml）
           FILES_TO_DELETE=(
             ".github/workflows/Lienol.yml"
             ".github/workflows/Mt798x.yml"
             ".github/workflows/Official.yml"
             ".github/workflows/Xwrt.yml"
             ".github/workflows/update-adguardhome-api-cache.yml"
+            ".github/workflows/validate.yml"
           )
           
           for file in "${FILES_TO_DELETE[@]}"; do
@@ -99,7 +98,7 @@ jobs:
             fi
           done
           
-          # 3. 删除不需要的 build 目录（只保留 Lede 和 Immortalwrt）
+          # 3. 删除不需要的 build 目录
           DIRS_TO_DELETE=(
             "build/Lienol"
             "build/Mt798x"
@@ -119,7 +118,7 @@ jobs:
           if [ "$HAS_CHANGES" = true ]; then
             git add -A
             if ! git diff --cached --quiet; then
-              git commit -m "chore: 恢复自定义 workflow (666, kkk)，清理多余配置"
+              git commit -m "chore: 恢复 kkk/666 workflow，清理无效配置"
               
               CURRENT_BRANCH="${GITHUB_REF_NAME:-$(git branch --show-current)}"
               git push origin "HEAD:${CURRENT_BRANCH}"
