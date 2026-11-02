@@ -21,99 +21,21 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.REPO_TOKEN }}
 
-      - name: 获取并魔改上游同步器
+      - name: 获取上游最新同步器
         shell: bash
         run: |
           set -euo pipefail
-          
-          # ==========================================
-          # 1. 备份阶段：把核心心血存入安全区 /tmp/my_backup
-          # ==========================================
-          mkdir -p /tmp/my_backup
-          
-          # 备份 Immortalwrt 的 files 文件夹
-          if [ -d "build/Immortalwrt/files" ]; then
-            mkdir -p /tmp/my_backup/imm_files
-            cp -r build/Immortalwrt/files/* /tmp/my_backup/imm_files/ 2>/dev/null || true
-          fi
-          
-          # 备份 Lede 的 files 文件夹
-          if [ -d "build/Lede/files" ]; then
-            mkdir -p /tmp/my_backup/lede_files
-            cp -r build/Lede/files/* /tmp/my_backup/lede_files/ 2>/dev/null || true
-          fi
-
-          # 备份自定义的 workflow 文件
-          if [ -f ".github/workflows/kkk.yml" ]; then
-            cp .github/workflows/kkk.yml /tmp/my_backup/
-          fi
-          if [ -f ".github/workflows/sync-upstream.yml" ]; then
-            cp .github/workflows/sync-upstream.yml /tmp/my_backup/
-          fi
-
-          # ==========================================
-          # 2. 准备拉取原作者的脚本并配置环境
-          # ==========================================
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           if git remote get-url upstream >/dev/null 2>&1; then
             git remote set-url upstream "https://github.com/${UPSTREAM_REPO}.git"
           else
             git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
           fi
           git fetch upstream "${UPSTREAM_BRANCH}" --prune
-          
           SYNC_SCRIPT="${RUNNER_TEMP}/openwrt-auto-sync-upstream.sh"
           git show "upstream/${UPSTREAM_BRANCH}:common/sync-upstream.sh" > "${SYNC_SCRIPT}"
           chmod +x "${SYNC_SCRIPT}"
-          
-          # ==========================================
-          # 3. 在原作者脚本的最后，追加咱们的“私有化手术”
-          # ==========================================
-          cat << 'EOF' >> "${SYNC_SCRIPT}"
-          
-          # === 自定义追加：同步后的清理与恢复 ===
-          
-          # 剔除原作者强制拉回来的废弃文件夹和自检
-          rm -rf build/Lienol build/Mt798x build/Official build/Xwrt
-          rm -f .github/workflows/Lienol.yml
-          rm -f .github/workflows/Mt798x.yml
-          rm -f .github/workflows/Official.yml
-          rm -f .github/workflows/Xwrt.yml
-          rm -f .github/workflows/validate.yml
-          
-          # 从安全区恢复咱们的心血
-          if [ -d "/tmp/my_backup" ]; then
-            mkdir -p .github/workflows
-            
-            # 恢复 workflow 脚本
-            if [ -f "/tmp/my_backup/kkk.yml" ]; then cp /tmp/my_backup/kkk.yml .github/workflows/; fi
-            if [ -f "/tmp/my_backup/sync-upstream.yml" ]; then cp /tmp/my_backup/sync-upstream.yml .github/workflows/; fi
-            
-            # 恢复 Immortalwrt 的 files
-            if [ -d "/tmp/my_backup/imm_files" ] && [ "$(ls -A /tmp/my_backup/imm_files 2>/dev/null)" ]; then
-              mkdir -p build/Immortalwrt/files
-              cp -r /tmp/my_backup/imm_files/* build/Immortalwrt/files/
-            fi
-            
-            # 恢复 Lede 的 files
-            if [ -d "/tmp/my_backup/lede_files" ] && [ "$(ls -A /tmp/my_backup/lede_files 2>/dev/null)" ]; then
-              mkdir -p build/Lede/files
-              cp -r /tmp/my_backup/lede_files/* build/Lede/files/
-            fi
-          fi
-          
-          # 提交并推送
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: remove unused dirs, protect custom workflows and files"
-            git push origin HEAD:${DEFAULT_BRANCH:-main} --force
-          fi
-          EOF
-          
           bash -n "${SYNC_SCRIPT}"
-          echo "最新同步器已加载并魔改完毕：${SYNC_SCRIPT}"
+          echo "最新同步器已加载：${SYNC_SCRIPT}"
 
       - name: 执行上游同步
         shell: bash
