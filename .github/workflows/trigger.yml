@@ -1,4 +1,4 @@
-name: 定时触发 Immortalwrt 编译
+name: 定时触发 Immortalwrt 编译(自设)
 
 on:
   schedule:
