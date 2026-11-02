@@ -11,22 +11,55 @@ jobs:
   trigger:
     runs-on: ubuntu-22.04
     steps:
-      - name: 使用 API 触发 Immortalwrt.yml 编译
+      - name: 检出仓库（为了读取 settings.ini）
+        uses: actions/checkout@v5
+
+      - name: 解析 settings.ini 并触发编译
         env:
           GH_TOKEN: ${{ secrets.REPO_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          echo "正在触发 Immortalwrt 编译..."
+          set -euo pipefail
+          
+          # 1. 读取 settings.ini
+          SETTINGS_FILE="build/Immortalwrt/settings.ini"
+          if [ ! -f "$SETTINGS_FILE" ]; then
+            echo "::error::找不到 $SETTINGS_FILE，请检查路径！"
+            exit 1
+          fi
+          
+          # 把 ini 格式变成环境变量 (忽略注释)
+          source <(grep -v '^#' "$SETTINGS_FILE" | sed 's/ *= */=/g')
+          
+          # 2. 处理布尔值和选项映射 (适配 Immortalwrt.yml 的 inputs)
+          # INFORMATION_NOTICE 的转换：false -> 关闭, TG -> Telegram
+          if [[ "$INFORMATION_NOTICE" == "false" || "$INFORMATION_NOTICE" == "关闭" ]]; then
+            NOTICE_VAL="关闭"
+          elif [[ "$INFORMATION_NOTICE" == "TG" || "$INFORMATION_NOTICE" == "telegram" ]]; then
+            NOTICE_VAL="Telegram"
+          else
+            NOTICE_VAL="Pushplus"
+          fi
+
+          # 3. 打印最终读取到的配置，方便你在 Actions 日志里核对
+          echo "============================================================"
+          echo "🚀 准备触发 Immortalwrt 编译"
+          echo "使用分支 (REPO_BRANCH)       : ${REPO_BRANCH}"
+          echo "配置文件 (CONFIG_FILE)       : ${CONFIG_FILE}"
+          echo "通知选项 (INFORMATION_NOTICE): ${NOTICE_VAL}"
+          echo "============================================================"
+
+          # 4. 触发 Immortalwrt.yml 编译
           gh workflow run Immortalwrt.yml \
             --repo "$REPO" \
             --ref "${{ github.ref_name }}" \
-            -f REPO_BRANCH="openwrt-24.10" \
-            -f CONFIG_FILE="x86_64" \
-            -f INFORMATION_NOTICE="关闭" \
-            -f KEEP_WORKFLOWS="30" \
-            -f KEEP_RELEASES="30" \
+            -f REPO_BRANCH="${REPO_BRANCH}" \
+            -f CONFIG_FILE="${CONFIG_FILE}" \
+            -f INFORMATION_NOTICE="${NOTICE_VAL}" \
+            -f KEEP_WORKFLOWS="${KEEP_WORKFLOWS}" \
+            -f KEEP_RELEASES="${KEEP_RELEASES}" \
             -f SSH_ACTION="false" \
-            -f UPLOAD_FIRMWARE="true" \
-            -f UPLOAD_RELEASE="false" \
-            -f CACHEWRTBUILD_SWITCH="true" \
-            -f UPDATE_FIRMWARE_ONLINE="true"
+            -f UPLOAD_FIRMWARE="${UPLOAD_FIRMWARE}" \
+            -f UPLOAD_RELEASE="${UPLOAD_RELEASE}" \
+            -f CACHEWRTBUILD_SWITCH="${CACHEWRTBUILD_SWITCH}" \
+            -f UPDATE_FIRMWARE_ONLINE="${UPDATE_FIRMWARE_ONLINE}"
