@@ -61,9 +61,29 @@ export Delete_unnecessary_items="0"          # 个别机型内一堆其他机型
 export Disable_53_redirection="0"            # 删除DNS强制重定向53端口防火墙规则(个别源码本身不带此功能)(1为启用命令,填0为不作修改)
 export Cancel_running="0"                    # 取消路由器每天跑分任务(个别源码本身不带此功能)(1为启用命令,填0为不作修改)
 
-# 把 honk 拉取到你创建的目录下的 honk 文件夹中
-mkdir -p package/xhh_pkgs
-git clone --depth=1 https://github.com/kenzok8/openwrt-honk.git package/xhh_pkgs/honk
+# ==========================================
+# 自动抓取并替换最新版 Xray-core
+# ==========================================
+echo "正在获取 Xray-core 最新版本号..."
+
+# 使用 GitHub API 自动获取最新的 Release 标签 (例如 v26.10.31)
+LATEST_XRAY_VER=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep "tag_name" | cut -d '"' -f 4)
+
+if [ -n "$LATEST_XRAY_VER" ]; then
+    echo "检测到 Xray 最新版本: $LATEST_XRAY_VER，开始拉取源码..."
+    
+    # 删掉系统自带的旧版
+    rm -rf package/feeds/packages/xray-core
+    rm -rf feeds/packages/net/xray-core
+    
+    # 自动按最新标签拉取
+    git clone --depth=1 -b "$LATEST_XRAY_VER" https://github.com/XTLS/Xray-core.git package/custom/xray-core
+    
+    # 强行加入编译列表
+    echo "CONFIG_PACKAGE_xray-core=y" >> .config
+else
+    echo "⚠️ 获取 Xray 最新版本失败，将退回使用系统默认版本。"
+fi
 
 # 晶晨CPU系列打包固件设置(不懂请看说明)
 export amlogic_model="s905d"
