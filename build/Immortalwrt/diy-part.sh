@@ -47,7 +47,7 @@ export AdGuardHome_Core="0"                  # 编译固件时自动增加AdGuar
 
 # === 可选开关（编译特性） ===
 export Enable_FW4="1"                    # 启用 fw4(nftables) 防火墙：1=启用（需要源码支持/会自动尝试拉取 firewall4 包），0=默认 iptables/firewall3
-export Preload_GeoData="0"               # 预置 GeoIP/GeoSite 数据：1=编译时下载写入固件（约30MB），0=不预置
+export Preload_GeoData="1"               # 预置 GeoIP/GeoSite 数据：1=编译时下载写入固件（约30MB），0=不预置
 
 # 开启NTFS格式盘挂载
 export Automatic_Mount_Settings="0"          # 编译时加入开启NTFS格式盘挂载的所需依赖(1为启用命令,填0为不作修改)
