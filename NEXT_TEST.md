@@ -1,4 +1,4 @@
-# next 分支测试清单 — V1.1.0-beta8
+# next 分支测试清单 — V1.1.0-beta17
 
 Beta8 不再重构编译核心，重点收紧 GitHub Actions、ImmortalWrt host 依赖、AutoUpdate 发布顺序和第三方 Action 稳定性。
 
@@ -58,10 +58,13 @@ ImmortalWrt `make menuconfig` 不应再出现 cloudreve/filebrowser/sub-web 缺�
 
 ## 6. 第一阶段交接状态回归
 
-针对第一阶段已触发第二阶段、但 GitHub UI 仍长期显示“自定义配置”运行中的问题：
+针对第一阶段已触发第二阶段、但 GitHub UI 仍长期显示“统一源码构建入口”运行中的问题：
 
 - SSH menuconfig、最终 seed、配置快照上传、触发第二阶段必须显示为独立顶层步骤
 - `need` composite 内不再嵌套 debugger 或 upload-artifact
+- 六套源码入口不再调用 `build-entry` composite；必须由 Workflow 顶层直接执行 `.github/scripts/build-entry.sh`。
+- 第一阶段不使用 `actions/checkout@v5`，改用仓库内普通 Git fetch/checkout，使用与 actions/checkout 相同的 Basic Authorization 头并固定检出 `GITHUB_SHA`；第二阶段保留原有 checkout。
+- SSH menuconfig 退出后必须清理 tmate 调试进程；不得残留 `tmate` 后台进程影响第一阶段 Job 收尾。
 - 第二阶段标题必须携带第一阶段 run number 与唯一 `HANDOFF_ID`
 - GitHub dispatch 请求最多等待 60 秒，不得无限卡住
 - dispatch 兼容 HTTP 200（返回运行地址）与历史 HTTP 204

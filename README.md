@@ -3,11 +3,11 @@
 基于 GitHub Actions 的 OpenWrt 自动编译项目，支持多源码、多架构、SSH `menuconfig`、配置持久化、缓存、失败诊断和固件发布。<br>
 A GitHub Actions based OpenWrt build system supporting multiple source trees, targets, SSH `menuconfig`, persistent configuration, caching, diagnostics, and firmware publishing.
 
-> **当前项目版本 / Current release label:** `V1.1.0-beta10`<br>
+> **当前项目版本 / Current release label:** `V1.1.0-beta17`<br>
 > **版本事实来源 / Version source of truth:** Git tag / GitHub Release / Git commit
 
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
-[![固件更新下载](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fdatout%2FOpenwrt-Auto%2Freleases%2Flatest&query=%24.name&style=for-the-badge&label=%E5%9B%BA%E4%BB%B6%E6%9B%B4%E6%96%B0%E4%B8%8B%E8%BD%BD)](https://github.com/datout/Openwrt-Auto/releases/latest)
+[![固件更新下载](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fdatout%2FOpenwrt-Auto%2Freleases%2Flatest&query=%24.name&style=for-the-badge&label=%E5%9B%BA%E4%BB%B6%E6%9B%B4%E6%96%B0%E4%B8%8B%E8%BD%BD)](https://github.com/datout/Openwrt-Auto/releases/tag/AutoUpdate)
 [![Tag](https://img.shields.io/github/v/tag/datout/Openwrt-Auto?filter=a%2A&sort=date&style=for-the-badge&label=TAG)](https://github.com/datout/Openwrt-Auto/releases/latest)
 
 ## 支持源码 / Supported Sources
@@ -91,8 +91,8 @@ Builds now use the repository `build/<source>` configuration tree directly; the 
 公共脚本固定来自仓库内的 `common/`，不再回退到 `/tmp/common`；旧的 `BENDI_VERSION`、`OPERATES_PATH` 和停用的 `seed_refresh.sh` 兼容层已移除。<br>
 Common scripts always come from the repository `common/` directory; there is no `/tmp/common` fallback, and the retired `BENDI_VERSION`, `OPERATES_PATH`, and `seed_refresh.sh` compatibility layer has been removed.
 
-六套源码入口工作流共用 `.github/actions/build-entry`，只在各自 Workflow 中保留源码分支、配置文件和默认参数等差异；最终第二阶段交接仍保留在入口 Workflow 中，以继续使用 5 分钟超时保护。<br>
-The six source-entry workflows share `.github/actions/build-entry`; each Workflow keeps only source-specific inputs and defaults, while the final second-stage handoff remains in the caller Workflow to retain its 5-minute timeout protection.
+六套源码入口工作流直接执行 `.github/scripts/build-entry.sh` 完成源码准备，不再通过本地 composite action 建立额外生命周期边界。第一阶段不再使用 `actions/checkout@v5`，改用普通 Git fetch/checkout 固定检出本次运行提交；SSH `menuconfig`、最终 seed、配置快照上传、编译信息和第二阶段交接均保留为入口 Workflow 的独立顶层步骤。<br>
+The six source-entry workflows execute `.github/scripts/build-entry.sh` directly without a local composite-action lifecycle boundary. SSH `menuconfig`, final seed generation, configuration snapshot upload, build information, and the second-stage handoff remain independent top-level Workflow steps.
 
 ## 分支说明 / Branches
 
@@ -110,6 +110,7 @@ Forks and custom repositories may directly modify `build/<source>/settings.ini`,
 If multiple source workflows use SSH `menuconfig` and write back to the same branch, run them serially to avoid remote-branch protection terminating a completed task.
 
 ## 更新记录 / Changelog
+
 
 ### V1.1.0-beta10 · 2026-10-27
 
