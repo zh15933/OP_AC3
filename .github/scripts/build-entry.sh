@@ -150,7 +150,8 @@ check_upstream() {
 
 }
 
-check_upstream
+# 上游更新提示已按要求关闭；如需恢复，取消下面一行注释
+# check_upstream
 
 # 验证仓库密钥。
 if [[ -z "${REPO_TOKEN:-}" ]]; then
