@@ -114,28 +114,56 @@ function ensure_node_package_manager_hosts() {
     grep -Rqs --include='Makefile' 'node-pnpm/host' "${packages_root}" 2>/dev/null && need_pnpm=1
   fi
 
+  # 兼容两种目录布局：
+  #   openwrt-24.10: feeds/packages/lang/node-yarn
+  #   openwrt-25.12: feeds/packages/lang/node/node-yarn
+  # 只要任意位置已经存在该包，就不要再联网补，避免同名包重复定义。
   if (( need_yarn == 1 )) \
-    && [[ ! -d "${packages_root}/lang/node-yarn" ]] \
-    && ! find "${HOME_PATH}/package" -type f -path '*/node-yarn/Makefile' -print -quit 2>/dev/null | grep -q .; then
+    && ! find "${packages_root}" "${HOME_PATH}/package" -type f \
+         -path '*/node-yarn/Makefile' -print -quit 2>/dev/null | grep -q .; then
     echo "补充缺失的 node-yarn/host 构建依赖"
     mkdir -p "${compat_root}"
-    gitsvn \
+    # gitsvn 失败时会直接 exit 1，用子 shell 隔离，改成只告警、不中断构建
+    if ! ( gitsvn \
       https://github.com/immortalwrt/packages/tree/openwrt-24.10/lang/node-yarn \
-      "${compat_root}/node-yarn"
+      "${compat_root}/node-yarn" ); then
+      echo "node-yarn 兼容包获取失败，继续构建（真缺依赖时 make 会明确指出）"
+    fi
   fi
 
   if (( need_pnpm == 1 )) \
-    && [[ ! -d "${packages_root}/lang/node-pnpm" ]] \
-    && ! find "${HOME_PATH}/package" -type f -path '*/node-pnpm/Makefile' -print -quit 2>/dev/null | grep -q .; then
+    && ! find "${packages_root}" "${HOME_PATH}/package" -type f \
+         -path '*/node-pnpm/Makefile' -print -quit 2>/dev/null | grep -q .; then
     echo "补充缺失的 node-pnpm/host 构建依赖"
     mkdir -p "${compat_root}"
-    gitsvn \
+    if ! ( gitsvn \
       https://github.com/immortalwrt/packages/tree/openwrt-24.10/lang/node-pnpm \
-      "${compat_root}/node-pnpm"
+      "${compat_root}/node-pnpm" ); then
+      echo "node-pnpm 兼容包获取失败，继续构建（真缺依赖时 make 会明确指出）"
+    fi
   fi
 }
 
 function ensure_common_feed_dependencies() {
+  # node-prebuilt 只提供 node/node-npm 两个包，而 gitsvn 对普通仓库 URL 是
+  # “先 rm -rf 目标目录，再整目录复制”，会把 ImmortalWrt 25.12 自带的
+  # feeds/packages/lang/node/node-yarn、node-pnpm 一并删掉。
+  # 所以替换之前先把这两个包备份到 package/compat：
+  #   1) 零网络、零额外克隆；
+  #   2) ensure_node_package_manager_hosts 看到 package/ 里已有，就不会再去拉 24.10 旧路径。
+  # 注意：只备份 lang/node/<pkg> 这种布局——它才会被替换删除；
+  # 24.10 的 lang/<pkg> 不在删除范围内，备份过去反而会造成同名包重复定义。
+  local _pkg_name _pkg_src
+  mkdir -p "${HOME_PATH}/package/compat"
+  for _pkg_name in node-yarn node-pnpm; do
+    _pkg_src="${HOME_PATH}/feeds/packages/lang/node/${_pkg_name}"
+    [[ -d "${_pkg_src}" ]] || continue
+    [[ -f "${HOME_PATH}/package/compat/${_pkg_name}/Makefile" ]] && continue
+    mkdir -p "${HOME_PATH}/package/compat/${_pkg_name}"
+    cp -Rf "${_pkg_src}/." "${HOME_PATH}/package/compat/${_pkg_name}/"
+    echo "已备份 ${_pkg_name} → package/compat/${_pkg_name}"
+  done
+
   # Keep OpenWrt/LEDE's own golang; only replace the node-prebuilt feed.
   gitsvn \
     https://github.com/sbwml/feeds_packages_lang_node-prebuilt \
