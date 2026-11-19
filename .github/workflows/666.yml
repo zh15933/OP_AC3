@@ -108,11 +108,52 @@ jobs:
             fi
           done
           
+          # 3.5 同步后恢复本 Fork 的定制：移除不需要的上游步骤（其余上游更新保留）
+          #     - 「⚠️ 上游更新提示（不阻断编译）」：本 Fork 不需要该提示
+          #     - 「生成 ESXi VMDK」：本 Fork 不产出 combined-efi.img.gz，该步骤必然失败
+          prune_step() {
+            local file="$1" name="$2" start end tmp="${1}.prune.tmp"
+            [[ -f "$file" ]] || return 1
+            start="$(grep -nF -- "- name: ${name}" "$file" | head -n1 | cut -d: -f1 || true)"
+            [[ -n "${start}" ]] || return 1
+            end=""
+            while IFS=: read -r ln _; do
+              if (( ln > start )); then end="${ln}"; break; fi
+            done < <(grep -n '^    - name:' "$file" || true)
+            if [[ -z "${end}" ]]; then
+              end="$(( $(wc -l < "$file") + 1 ))"
+            fi
+            cp "$file" "$tmp"
+            sed -i "${start},$(( end - 1 ))d" "$tmp"
+            if (( $(grep -c '^    - name:' "$tmp" || true) < 5 )); then
+              rm -f "$tmp"
+              return 1
+            fi
+            mv "$tmp" "$file"
+            echo "已移除步骤：${name}（${file}）"
+            return 0
+          }
+
+          for step_name in "⚠️ 上游更新提示（不阻断编译）" "生成 ESXi VMDK"; do
+            if prune_step ".github/workflows/compile.yml" "${step_name}"; then
+              HAS_CHANGES=true
+            else
+              echo "未找到步骤（可能上游已改名，跳过）：${step_name}"
+            fi
+          done
+
+          # 第一阶段 build-entry.sh 的上游更新检测：同步后会被恢复，这里重新注释掉
+          if grep -Eq '^[[:space:]]*check_upstream[[:space:]]*$' ".github/scripts/build-entry.sh"; then
+            sed -i -E 's|^([[:space:]]*)check_upstream[[:space:]]*$|\1# check_upstream   # 由 666.yml 自动关闭|' ".github/scripts/build-entry.sh"
+            echo "已关闭 build-entry.sh 的上游更新检测"
+            HAS_CHANGES=true
+          fi
+
           # 4. 提交并推送
           if [ "$HAS_CHANGES" = true ]; then
             git add -A
             if ! git diff --cached --quiet; then
-              git commit -m "chore: 恢复自定义 workflow (666, kkk, trigger)，清理无效配置"
+              git commit -m "chore: 恢复自定义 workflow，清理无效配置与不需要的上游步骤"
               CURRENT_BRANCH="${GITHUB_REF_NAME:-$(git branch --show-current)}"
               git push origin "HEAD:${CURRENT_BRANCH}"
               echo "清理完成并已推送。"
